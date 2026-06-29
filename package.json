@@ -1,0 +1,14 @@
+{
+  "name": "buurtbord-push",
+  "version": "1.0.0",
+  "description": "Push notifications voor Het Buurtbord",
+  "main": "api/send-push.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}
