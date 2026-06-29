@@ -1,79 +1,65 @@
-import admin from 'firebase-admin';
-import { createClient } from '@supabase/supabase-js';
+const admin = require('firebase-admin');
+const { createClient } = require('@supabase/supabase-js');
 
-// Initialize Firebase Admin SDK
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+// Firebase initialiseren
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    }),
+  });
+}
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
-
-// Initialize Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
+  process.env.SUPABASE_SERVICE_KEY
 );
 
-export default async function handler(req, res) {
-  // Only POST requests
+module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { berichtId, interesseNaam, interesseHuisnr, plaatserNaam, plaatserHuisnr } = req.body;
+    const { record } = req.body;
 
-    console.log(`📬 Push request: ${interesseNaam} (nr. ${interesseHuisnr}) → ${plaatserNaam} (nr. ${plaatserHuisnr})`);
-
-    // 1. Laad FCM token van plaatser uit Supabase
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('fcm_token')
-      .eq('naam', plaatserNaam)
-      .eq('huisnr', plaatserHuisnr)
+    // Haal het originele bericht op
+    const { data: bericht } = await supabase
+      .from('berichten')
+      .select('*')
+      .eq('id', record.bericht_id)
       .single();
 
-    if (userError || !userData?.fcm_token) {
-      console.warn('❌ Geen FCM token voor plaatser:', plaatserNaam);
-      return res.status(200).json({ 
-        success: false, 
-        reason: 'No FCM token for poster',
-        debug: userError 
-      });
+    if (!bericht) {
+      return res.status(200).json({ message: 'Bericht niet gevonden' });
     }
 
-    const fcmToken = userData.fcm_token;
-    console.log('✅ FCM token gevonden');
+    // Haal FCM token op van de auteur van het bericht
+    const { data: user } = await supabase
+      .from('users')
+      .select('fcm_token')
+      .eq('naam', bericht.naam)
+      .eq('huisnr', bericht.huisnr)
+      .single();
 
-    // 2. Stuur push notification via Firebase
-    const message = {
+    if (!user || !user.fcm_token) {
+      return res.status(200).json({ message: 'Geen FCM token gevonden' });
+    }
+
+    // Stuur push notificatie
+    await admin.messaging().send({
+      token: user.fcm_token,
       notification: {
-        title: 'Het Buurtbord 🏘️',
-        body: `${interesseNaam} (nr. ${interesseHuisnr}) heeft interesse getoond!`
+        title: '❤️ Interesse in jouw bericht!',
+        body: `${record.naam} van nr. ${record.huisnr} is geïnteresseerd in: "${bericht.tekst}"`,
       },
-      webpush: {
-        fcmOptions: {
-          link: 'https://buurtbord.pages.dev'
-        }
-      },
-      token: fcmToken
-    };
-
-    const response = await admin.messaging().send(message);
-    console.log('✅ Push notification verstuurd:', response);
-
-    return res.status(200).json({
-      success: true,
-      messageId: response,
-      recipient: `${plaatserNaam} (nr. ${plaatserHuisnr})`
     });
 
+    return res.status(200).json({ success: true });
   } catch (error) {
-    console.error('❌ Push error:', error);
-    return res.status(500).json({
-      success: false,
-      error: error.message,
-      details: error.toString()
-    });
+    console.error('Push fout:', error);
+    return res.status(500).json({ error: error.message });
   }
-}
+};
