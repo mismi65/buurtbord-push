@@ -1,7 +1,6 @@
 const admin = require('firebase-admin');
 const { createClient } = require('@supabase/supabase-js');
 
-// Firebase initialiseren
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -32,13 +31,11 @@ async function sendPushMetRetry(message, maxPogingen = 3) {
       laatsteFout = error;
       console.warn(`Poging ${poging} mislukt:`, error.message);
 
-      // Alleen retryen bij de sporadische auth-error, niet bij ongeldige tokens
       const isRetryWaardig = error.message?.includes('Auth error from APNS or Web Push Service');
       if (!isRetryWaardig || poging === maxPogingen) {
         throw error;
       }
 
-      // Korte, oplopende pauze tussen pogingen (1s, 2s)
       await wait(poging * 1000);
     }
   }
