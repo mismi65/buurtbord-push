@@ -20,7 +20,7 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function sendPushMetRetry(message, maxPogingen = 3) {
+async function sendPushMetRetry(message, maxPogingen = 5) {
   let laatsteFout;
   for (let poging = 1; poging <= maxPogingen; poging++) {
     try {
@@ -36,7 +36,7 @@ async function sendPushMetRetry(message, maxPogingen = 3) {
         throw error;
       }
 
-      await wait(poging * 1000);
+      await wait(poging * 1500);
     }
   }
   throw laatsteFout;
