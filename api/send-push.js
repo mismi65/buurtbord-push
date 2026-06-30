@@ -75,7 +75,7 @@ module.exports = async (req, res) => {
       token: user.fcm_token,
       notification: {
         title: '❤️ Interesse in jouw bericht!',
-        body: `${record.naam} van nr. ${record.huisnr} is geïnteresseerd in: "${bericht.tekst}"`,
+        body: `${record.naam} van nr. ${record.huisnr} heeft interesse getoond — neem contact op!`,
       },
     };
 
