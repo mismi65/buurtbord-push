@@ -17,6 +17,34 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function sendPushMetRetry(message, maxPogingen = 3) {
+  let laatsteFout;
+  for (let poging = 1; poging <= maxPogingen; poging++) {
+    try {
+      await admin.messaging().send(message);
+      console.log(`Push gelukt op poging ${poging}`);
+      return true;
+    } catch (error) {
+      laatsteFout = error;
+      console.warn(`Poging ${poging} mislukt:`, error.message);
+
+      // Alleen retryen bij de sporadische auth-error, niet bij ongeldige tokens
+      const isRetryWaardig = error.message?.includes('Auth error from APNS or Web Push Service');
+      if (!isRetryWaardig || poging === maxPogingen) {
+        throw error;
+      }
+
+      // Korte, oplopende pauze tussen pogingen (1s, 2s)
+      await wait(poging * 1000);
+    }
+  }
+  throw laatsteFout;
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -25,7 +53,6 @@ module.exports = async (req, res) => {
   try {
     const { record } = req.body;
 
-    // Haal het originele bericht op
     const { data: bericht } = await supabase
       .from('berichten')
       .select('*')
@@ -36,7 +63,6 @@ module.exports = async (req, res) => {
       return res.status(200).json({ message: 'Bericht niet gevonden' });
     }
 
-    // Haal FCM token op van de auteur van het bericht
     const { data: user } = await supabase
       .from('users')
       .select('fcm_token')
@@ -48,14 +74,15 @@ module.exports = async (req, res) => {
       return res.status(200).json({ message: 'Geen FCM token gevonden' });
     }
 
-    // Stuur push notificatie
-    await admin.messaging().send({
+    const message = {
       token: user.fcm_token,
       notification: {
         title: '❤️ Interesse in jouw bericht!',
         body: `${record.naam} van nr. ${record.huisnr} is geïnteresseerd in: "${bericht.tekst}"`,
       },
-    });
+    };
+
+    await sendPushMetRetry(message);
 
     return res.status(200).json({ success: true });
   } catch (error) {
